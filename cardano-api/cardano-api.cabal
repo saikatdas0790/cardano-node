@@ -170,6 +170,7 @@ test-suite cardano-api-test
                       , tasty
                       , tasty-hedgehog
                       , tasty-quickcheck
+                      , tasty-th
                       , text
                       , time
 
@@ -179,6 +180,7 @@ test-suite cardano-api-test
                         Test.Cardano.Api.Json
                         Test.Cardano.Api.Ledger
                         Test.Cardano.Api.Metadata
+                        Test.Cardano.Api.TxBody
                         Test.Cardano.Api.Typed.Bech32
                         Test.Cardano.Api.Typed.CBOR
                         Test.Cardano.Api.Typed.Envelope

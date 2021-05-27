@@ -32,9 +32,13 @@ prop_ord_distributive_TxId :: Property
 prop_ord_distributive_TxId =
     ord_distributive genTxId toShelleyTxId
 
-prop_ord_distributive_TxIn :: Property
-prop_ord_distributive_TxIn =
-    ord_distributive genTxIn toShelleyTxIn
+prop_ord_distributive_TxIn_Byron :: Property
+prop_ord_distributive_TxIn_Byron =
+    ord_distributive (genTxIn ByronEra) toShelleyTxIn
+
+prop_ord_distributive_TxIn_Shelley :: Property
+prop_ord_distributive_TxIn_Shelley =
+    ord_distributive (genTxIn ShelleyEra) toShelleyTxIn
 
 prop_ord_distributive_Address :: Property
 prop_ord_distributive_Address =
@@ -55,4 +59,3 @@ prop_ord_distributive_ScriptData =
 
 tests :: TestTree
 tests = fromGroup $$discover
-

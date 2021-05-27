@@ -118,7 +118,7 @@ import           Data.Aeson.Types (ToJSONKey (..), toJSONKeyText)
 import           Data.Bifunctor (first)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Foldable (toList)
+import           Data.Foldable (for_, toList)
 import           Data.List (intercalate)
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Map.Strict (Map)
@@ -130,7 +130,7 @@ import qualified Data.Set as Set
 import           Data.String (IsString)
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import           Data.Word (Word64)
+import           Data.Word (Word32, Word64)
 import           GHC.Generics
 
 import           Cardano.Binary (Annotated (..), reAnnotate, recoverBytes)
@@ -149,6 +149,8 @@ import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.Era as Ledger
 import qualified Cardano.Ledger.SafeHash as SafeHash
 import qualified Cardano.Ledger.Shelley.Constraints as Ledger
+import           Ouroboros.Consensus.Shelley.Eras (StandardAllegra, StandardAlonzo, StandardMary,
+                   StandardShelley)
 
 import           Cardano.Ledger.BaseTypes (StrictMaybe (..), maybeToStrictMaybe)
 import qualified Cardano.Ledger.Keys as Shelley
@@ -173,9 +175,6 @@ import qualified Cardano.Ledger.Alonzo.Scripts as Alonzo
 import qualified Cardano.Ledger.Alonzo.Tx as Alonzo
 import qualified Cardano.Ledger.Alonzo.TxBody as Alonzo
 import qualified Cardano.Ledger.Alonzo.TxWitness as Alonzo
-
-import           Ouroboros.Consensus.Shelley.Eras (StandardAllegra, StandardAlonzo, StandardMary,
-                   StandardShelley)
 
 import           Cardano.Api.Address
 import           Cardano.Api.Certificate
@@ -1057,6 +1056,7 @@ data TxBodyContent build era =
        txUpdateProposal :: TxUpdateProposal era,
        txMintValue      :: TxMintValue    build era
      }
+     deriving (Eq, Show)
 
 
 -- ----------------------------------------------------------------------------
@@ -1348,7 +1348,8 @@ data TxBodyError era =
      | TxBodyAuxDataHashInvalidError
      | TxBodyMintBeforeMaryError
      | TxBodyMissingProtocolParams
-     deriving Show
+     | TxBodyInIxOverflow TxIn
+     deriving (Eq, Show)
 
 instance Error (TxBodyError era) where
     displayError TxBodyEmptyTxIns  = "Transaction body has no inputs"
@@ -1375,6 +1376,10 @@ instance Error (TxBodyError era) where
     displayError TxBodyMissingProtocolParams =
       "Transaction uses Plutus scripts but does not provide the protocol " ++
       "parameters to hash"
+    displayError (TxBodyInIxOverflow txin) =
+      "Transaction input index is too big, " ++
+      "acceptable value is up to 2^32-1, " ++
+      "in input " ++ show txin
 
 
 makeTransactionBody :: forall era.
@@ -1389,6 +1394,7 @@ makeTransactionBody =
 
 pattern TxBody :: TxBodyContent ViewTx era -> TxBody era
 pattern TxBody txbodycontent <- (getTxBodyContent -> txbodycontent)
+{-# COMPLETE TxBody #-}
 
 getTxBodyContent :: TxBody era -> TxBodyContent ViewTx era
 getTxBodyContent (ByronTxBody body) = getByronTxBodyContent body
@@ -1756,8 +1762,10 @@ fromLedgerTxMintValue era body =
 makeByronTransactionBody :: TxBodyContent BuildTx ByronEra
                          -> Either (TxBodyError ByronEra) (TxBody ByronEra)
 makeByronTransactionBody TxBodyContent { txIns, txOuts } = do
-    ins'  <- NonEmpty.nonEmpty txIns      ?! TxBodyEmptyTxIns
-    let ins'' = NonEmpty.map (toByronTxIn . fst) ins'
+    ins' <- NonEmpty.nonEmpty (map fst txIns) ?! TxBodyEmptyTxIns
+    for_ ins' $ \txin@(TxIn _ (TxIx txix)) ->
+      guard (txix <= maxByronTxInIx) ?! TxBodyInIxOverflow txin
+    let ins'' = fmap toByronTxIn ins'
 
     outs'  <- NonEmpty.nonEmpty txOuts    ?! TxBodyEmptyTxOuts
     outs'' <- traverse
@@ -1770,6 +1778,9 @@ makeByronTransactionBody TxBodyContent { txIns, txOuts } = do
             (Byron.UnsafeTx ins'' outs'' (Byron.mkAttributes ()))
             ()
   where
+    maxByronTxInIx :: Word
+    maxByronTxInIx = fromIntegral (maxBound :: Word32)
+
     classifyRangeError :: TxOut ByronEra -> TxBodyError ByronEra
     classifyRangeError
       txout@(TxOut (AddressInEra ByronAddressInAnyEra ByronAddress{})
