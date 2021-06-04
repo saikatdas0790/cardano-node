@@ -66,6 +66,7 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 
+import           Cardano.Binary (ToCBOR(..), FromCBOR(..))
 import qualified Cardano.Chain.Common as Byron
 
 import qualified Cardano.Ledger.Coin as Shelley
@@ -83,14 +84,13 @@ import           Cardano.Ledger.Crypto (StandardCrypto)
 
 newtype Lovelace = Lovelace Integer
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Enum, Num, ToJSON, FromJSON)
+  deriving newtype (Eq, Ord, Enum, Num, ToJSON, FromJSON, ToCBOR, FromCBOR)
 
 instance Semigroup Lovelace where
   Lovelace a <> Lovelace b = Lovelace (a + b)
 
 instance Monoid Lovelace where
   mempty = Lovelace 0
-
 
 toByronLovelace :: Lovelace -> Maybe Byron.Lovelace
 toByronLovelace (Lovelace x) =

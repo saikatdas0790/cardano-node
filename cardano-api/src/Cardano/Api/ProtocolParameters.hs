@@ -1,9 +1,13 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | The various Cardano protocol parameters, including:
@@ -53,7 +57,6 @@ module Cardano.Api.ProtocolParameters (
 import           Prelude
 
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as LBS
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           Data.Scientific (Scientific)
@@ -505,6 +508,64 @@ data ProtocolParametersUpdate =
     }
   deriving (Eq, Show)
 
+instance ToCBOR ProtocolParametersUpdate where
+  toCBOR ppu = CBOR.encodeListLen 25
+      <> toCBOR (protocolUpdateProtocolVersion ppu)
+      <> toCBOR (protocolUpdateDecentralization ppu)
+      <> toCBOR (protocolUpdateExtraPraosEntropy ppu)
+      <> toCBOR (protocolUpdateMaxBlockHeaderSize ppu)
+      <> toCBOR (protocolUpdateMaxBlockBodySize ppu)
+      <> toCBOR (protocolUpdateMaxTxSize ppu)
+      <> toCBOR (protocolUpdateTxFeeFixed ppu)
+      <> toCBOR (protocolUpdateTxFeePerByte ppu)
+      <> toCBOR (protocolUpdateMinUTxOValue ppu)
+      <> toCBOR (protocolUpdateStakeAddressDeposit ppu)
+      <> toCBOR (protocolUpdateStakePoolDeposit ppu)
+      <> toCBOR (protocolUpdateMinPoolCost ppu)
+      <> toCBOR (protocolUpdatePoolRetireMaxEpoch ppu)
+      <> toCBOR (protocolUpdateStakePoolTargetNum ppu)
+      <> toCBOR (protocolUpdatePoolPledgeInfluence ppu)
+      <> toCBOR (protocolUpdateMonetaryExpansion ppu)
+      <> toCBOR (protocolUpdateTreasuryCut ppu)
+      <> toCBOR (protocolUpdateUTxOCostPerWord ppu)
+      <> toCBOR () -- TODO alonzo how to serialise this?
+      <> toCBOR (protocolUpdatePrices ppu)
+      <> toCBOR (protocolUpdateMaxTxExUnits ppu)
+      <> toCBOR (protocolUpdateMaxBlockExUnits ppu)
+      <> toCBOR (protocolUpdateMaxValueSize ppu)
+      <> toCBOR (protocolUpdateCollateralPercent ppu)
+      <> toCBOR (protocolUpdateMaxCollateralInputs ppu)
+
+instance FromCBOR ProtocolParametersUpdate where
+  fromCBOR = do
+    CBOR.enforceSize "ProtocolParametersUpdate" 25
+    ProtocolParametersUpdate
+      <$> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> (mempty <$ fromCBOR @()) -- TODO alonzo how to serialise this?
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+      <*> fromCBOR
+
 instance Semigroup ProtocolParametersUpdate where
     ppu1 <> ppu2 =
       ProtocolParametersUpdate {
@@ -582,6 +643,12 @@ instance Monoid ProtocolParametersUpdate where
 newtype PraosNonce = PraosNonce (Ledger.Hash StandardCrypto ByteString)
   deriving (Eq, Ord, Show, Generic)
 
+instance ToCBOR PraosNonce where
+  toCBOR (PraosNonce h) = toCBOR h
+
+instance FromCBOR PraosNonce where
+  fromCBOR = PraosNonce <$> fromCBOR
+
 instance ToJSON PraosNonce where
   toJSON (PraosNonce h) =
     Aeson.String $ Crypto.hashToTextAsHex h
@@ -620,6 +687,18 @@ data ExecutionUnitPrices =
      }
   deriving (Eq, Show)
 
+instance ToCBOR ExecutionUnitPrices where
+  toCBOR eup = CBOR.encodeListLen 2
+    <> toCBOR (priceExecutionSteps eup)
+    <> toCBOR (priceExecutionMemory eup)
+
+instance FromCBOR ExecutionUnitPrices where
+  fromCBOR = do
+    CBOR.enforceSize "ExecutionUnitPrices" 2
+    ExecutionUnitPrices
+      <$> fromCBOR
+      <*> fromCBOR
+
 instance ToJSON ExecutionUnitPrices where
   toJSON ExecutionUnitPrices{priceExecutionSteps, priceExecutionMemory} =
     object [ "priceSteps"  .= priceExecutionSteps
@@ -631,7 +710,6 @@ instance FromJSON ExecutionUnitPrices where
       ExecutionUnitPrices
         <$> o .: "priceSteps"
         <*> o .: "priceMemory"
-
 
 toAlonzoPrices :: ExecutionUnitPrices -> Alonzo.Prices
 toAlonzoPrices ExecutionUnitPrices{priceExecutionSteps, priceExecutionMemory} =
@@ -655,6 +733,9 @@ fromAlonzoPrices Alonzo.Prices{Alonzo.prSteps, Alonzo.prMem} =
 newtype CostModel = CostModel (Map Text Integer)
   deriving (Eq, Show)
   deriving newtype (ToJSON, FromJSON)
+
+instance ToCBOR CostModel where
+  toCBOR (CostModel m) = toCBOR m
 
 validateCostModel :: PlutusScriptVersion lang
                   -> CostModel
@@ -713,7 +794,21 @@ data UpdateProposal =
      UpdateProposal
        !(Map (Hash GenesisKey) ProtocolParametersUpdate)
        !EpochNo
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
+
+instance ToCBOR UpdateProposal where
+  toCBOR (UpdateProposal updateMap epochNo) = CBOR.encodeListLen 2
+    <> toCBOR updateMap
+    <> toCBOR epochNo
+
+instance FromCBOR UpdateProposal where
+  fromCBOR = do
+    CBOR.enforceSize "UpdateProposal" 2
+    UpdateProposal
+      <$> fromCBOR
+      <*> fromCBOR
+
+
 
 instance HasTypeProxy UpdateProposal where
     data AsType UpdateProposal = AsUpdateProposal
@@ -722,14 +817,7 @@ instance HasTypeProxy UpdateProposal where
 instance HasTextEnvelope UpdateProposal where
     textEnvelopeType _ = "UpdateProposalShelley"
 
-instance SerialiseAsCBOR UpdateProposal where
-    --TODO alonzo: we can no longer use this Shelley-specific encoding
-    serialiseToCBOR = CBOR.serializeEncoding'
-                    . toCBOR
-                    . toLedgerUpdate ShelleyBasedEraShelley
-    deserialiseFromCBOR _ bs =
-      fromLedgerUpdate ShelleyBasedEraShelley <$> CBOR.decodeFull (LBS.fromStrict bs)
-
+deriving anyclass instance SerialiseAsCBOR UpdateProposal
 
 makeShelleyUpdateProposal :: ProtocolParametersUpdate
                           -> [Hash GenesisKey]

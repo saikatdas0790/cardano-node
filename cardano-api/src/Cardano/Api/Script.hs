@@ -796,6 +796,18 @@ data ExecutionUnits =
      }
   deriving (Eq, Show)
 
+instance ToCBOR ExecutionUnits where
+  toCBOR eup = CBOR.encodeListLen 2
+    <> toCBOR (executionSteps eup)
+    <> toCBOR (executionMemory eup)
+
+instance FromCBOR ExecutionUnits where
+  fromCBOR = do
+    CBOR.enforceSize "ExecutionUnits" 2
+    ExecutionUnits
+      <$> fromCBOR
+      <*> fromCBOR
+
 instance ToJSON ExecutionUnits where
   toJSON ExecutionUnits{executionSteps, executionMemory} =
     object [ "steps"  .= executionSteps

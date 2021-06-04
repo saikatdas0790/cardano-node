@@ -611,6 +611,15 @@ newtype instance Hash GenesisKey =
   deriving stock (Eq, Ord)
   deriving (Show, IsString) via UsingRawBytesHex (Hash PaymentKey)
 
+instance ToCBOR (Hash GenesisKey) where
+  toCBOR = toCBOR . serialiseToRawBytes
+
+instance FromCBOR (Hash GenesisKey) where
+  fromCBOR = do
+    bs <- fromCBOR
+    maybe (fail "Unable to deserialise Hash GenesisKey") return $
+      deserialiseFromRawBytes (AsHash AsGenesisKey) bs
+
 instance SerialiseAsRawBytes (Hash GenesisKey) where
     serialiseToRawBytes (GenesisKeyHash (Shelley.KeyHash vkh)) =
       Crypto.hashToBytes vkh
