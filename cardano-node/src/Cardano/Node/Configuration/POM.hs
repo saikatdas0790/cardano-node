@@ -37,6 +37,7 @@ import           Cardano.Tracing.Config
 import           Ouroboros.Consensus.Storage.LedgerDB.DiskPolicy (SnapshotInterval (..))
 import           Ouroboros.Network.Block (MaxSlotNo (..))
 import           Ouroboros.Network.NodeToNode (DiffusionMode (..))
+import           Ouroboros.Consensus.Node ( NetworkP2PMode (..) )
 
 data NodeConfiguration
   = NodeConfiguration
@@ -85,6 +86,9 @@ data NodeConfiguration
        , ncTargetNumberOfKnownPeers       :: Int
        , ncTargetNumberOfEstablishedPeers :: Int
        , ncTargetNumberOfActivePeers      :: Int
+
+         -- Enable P2P switch
+       , ncEnableP2P :: NetworkP2PMode
        } deriving (Eq, Show)
 
 
@@ -130,6 +134,9 @@ data PartialNodeConfiguration
        , pncTargetNumberOfKnownPeers       :: !(Last Int)
        , pncTargetNumberOfEstablishedPeers :: !(Last Int)
        , pncTargetNumberOfActivePeers      :: !(Last Int)
+
+         -- Enable P2P switch
+       , pncEnableP2P :: !(Last NetworkP2PMode)
        } deriving (Eq, Generic, Show)
 
 instance AdjustFilePaths PartialNodeConfiguration where
@@ -187,6 +194,12 @@ instance FromJSON PartialNodeConfiguration where
       pncTargetNumberOfEstablishedPeers <- Last <$> v .:? "TargetNumberOfEstablishedPeers"
       pncTargetNumberOfActivePeers      <- Last <$> v .:? "TargetNumberOfActivePeers"
 
+      -- Enable P2P switch
+      p2pSwitch <- v .:? "EnableP2P" .!= Just False
+      let pncEnableP2P =
+            case p2pSwitch of
+              Nothing -> mempty
+              Just r  -> Last $ Just (bool DisabledP2PMode EnabledP2PMode r)
 
       pure PartialNodeConfiguration {
              pncProtocolConfig = pncProtocolConfig'
@@ -214,6 +227,7 @@ instance FromJSON PartialNodeConfiguration where
            , pncTargetNumberOfKnownPeers
            , pncTargetNumberOfEstablishedPeers
            , pncTargetNumberOfActivePeers
+           , pncEnableP2P
            }
     where
       parseByronProtocol v = do
@@ -319,6 +333,7 @@ defaultPartialNodeConfiguration =
     , pncTargetNumberOfKnownPeers       = Last (Just 5)
     , pncTargetNumberOfEstablishedPeers = Last (Just 2)
     , pncTargetNumberOfActivePeers      = Last (Just 1)
+    , pncEnableP2P = Last (Just DisabledP2PMode)
     }
 
 lastOption :: Parser a -> Parser (Last a)
@@ -360,6 +375,9 @@ makeNodeConfiguration pnc = do
   ncTimeWaitTimeout <-
     lastToEither "Missing TimeWaitTimeout"
     $ pncTimeWaitTimeout pnc
+  ncEnableP2P <-
+    lastToEither "Missing enableP2P"
+    $ pncEnableP2P pnc
 
   return $ NodeConfiguration
              { ncNodeIPv4Addr = getLast $ pncNodeIPv4Addr pnc
@@ -387,6 +405,7 @@ makeNodeConfiguration pnc = do
              , ncTargetNumberOfKnownPeers
              , ncTargetNumberOfEstablishedPeers
              , ncTargetNumberOfActivePeers
+             , ncEnableP2P
              }
 
 ncProtocol :: NodeConfiguration -> Protocol
